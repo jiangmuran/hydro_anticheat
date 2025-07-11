@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>反抄袭检测结果查看器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+
+        .tab.active {
+            background: white;
+            border-bottom-color: #667eea;
+            color: #667eea;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+        }
+
+        .content {
+            padding: 30px;
+            min-height: 600px;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f0f0;
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8f4fd;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
+        }
+
+        .card.suspicious {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+
+        .card.warning {
+            border-left-color: #ffc107;
+            background: #fffbf0;
+        }
+
+        .card.success {
+            border-left-color: #28a745;
+            background: #f8fff9;
+        }
+
+        .similarity-bar {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 20px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+
+        .similarity-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
+            transition: width 0.3s ease;
+        }
+
+        .file-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 15px 0;
+        }
+
+        .info-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .code-comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .code-editor {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        .keyword-highlight {
+            background: #ffeb3b;
+            color: #000;
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin: 2px;
+            display: inline-block;
+        }
+
+        .comment-highlight {
+            background: #4caf50;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin: 2px;
+            display: inline-block;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .problem-section {
+            margin-bottom: 30px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .problem-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .problem-content {
+            padding: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border: 1px solid #f5c6cb;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .graph-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #graphContainer {
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            background: #f8f9fa;
+            min-height: 600px;
+            position: relative;
+        }
+        
+        #graphContainer svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 反抄袭检测结果查看器</h1>
+            <p>上传JSON文件查看检测结果，或上传两份代码进行对比分析</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('overview')">📊 总览</button>
+            <button class="tab" onclick="switchTab('suspicious')">🚨 可疑抄袭</button>
+            <button class="tab" onclick="switchTab('graph')">🕸️ 抄袭关系图</button>
+            <button class="tab" onclick="switchTab('keywords')">🔍 特殊关键词</button>
+            <button class="tab" onclick="switchTab('files')">📁 文件分析</button>
+        </div>
+
+        <div class="content">
+            <!-- 文件上传区域 -->
+            <div class="upload-area" id="jsonUploadArea">
+                <h3>📁 上传检测结果JSON文件</h3>
+                <p>拖拽JSON文件到此处，或点击下方按钮选择文件</p>
+                <input type="file" id="jsonFile" accept=".json" style="display: none;">
+                <button class="upload-btn" onclick="document.getElementById('jsonFile').click()">
+                    选择JSON文件
+                </button>
+            </div>
+
+            <!-- 总览页面 -->
+            <div id="overview" class="section active">
+                <div id="overviewContent" class="hidden">
+                    <div class="stats-grid" id="statsGrid"></div>
+                    
+                    <div class="card">
+                        <h3>🔍 搜索功能</h3>
+                        <div style="display: flex; gap: 10px; margin: 15px 0;">
+                            <input type="text" id="searchInput" placeholder="输入学生姓名或文件名搜索..." 
+                                   style="flex: 1; padding: 10px; border: 2px solid #667eea; border-radius: 5px;">
+                            <button class="upload-btn" onclick="searchData()">搜索</button>
+                            <button class="upload-btn" onclick="clearSearch()" style="background: #6c757d;">清除</button>
+                        </div>
+                        <div id="searchResults"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3>📋 题目概览</h3>
+                        <div id="problemOverview"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 可疑抄袭页面 -->
+            <div id="suspicious" class="section">
+                <div id="suspiciousContent" class="hidden">
+                    <div class="card">
+                        <h3>🚨 可疑抄袭对</h3>
+                        <div style="margin: 15px 0;">
+                            <label>按相似度筛选: </label>
+                            <select id="similarityFilter" onchange="filterSuspicious()">
+                                <option value="0">全部</option>
+                                <option value="0.7">70%以上</option>
+                                <option value="0.8">80%以上</option>
+                                <option value="0.9">90%以上</option>
+                            </select>
+                        </div>
+                        <div id="suspiciousPairsContent"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 特殊关键词页面 -->
+            <div id="keywords" class="section">
+                <div id="keywordsContent" class="hidden">
+                    <div class="card">
+                        <h3>🔍 特殊关键词检测</h3>
+                        <div style="margin: 15px 0;">
+                            <label>按关键词筛选: </label>
+                            <select id="keywordFilter" onchange="filterKeywords()">
+                                <option value="">全部</option>
+                                <option value="freopen">freopen</option>
+                                <option value="system">system</option>
+                                <option value="exec">exec</option>
+                                <option value="eval">eval</option>
+                                <option value="subprocess">subprocess</option>
+                                <option value="单行注释">单行注释</option>
+                                <option value="多行注释">多行注释</option>
+                            </select>
+                        </div>
+                        <div id="specialKeywordsContent"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 抄袭关系图页面 -->
+            <div id="graph" class="section">
+                <div id="graphContent" class="hidden">
+                    <div class="card">
+                        <h3>🕸️ 抄袭关系网络图</h3>
+                        <div style="margin: 15px 0;">
+                            <label>按题目筛选: </label>
+                            <select id="graphProblemFilter" onchange="updateGraph()">
+                                <option value="">全部题目</option>
+                            </select>
+                            <label style="margin-left: 20px;">按相似度筛选: </label>
+                            <select id="graphSimilarityFilter" onchange="updateGraph()">
+                                <option value="0">全部</option>
+                                <option value="0.7">70%以上</option>
+                                <option value="0.8">80%以上</option>
+                                <option value="0.9">90%以上</option>
+                                <option value="0.95">95%以上</option>
+                            </select>
+                        </div>
+                        <div id="graphContainer" style="width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa;"></div>
+                        <div id="graphStats" style="margin-top: 15px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 文件分析页面 -->
+            <div id="files" class="section">
+                <div id="filesContent" class="hidden">
+                    <div class="card">
+                        <h3>📁 文件特征分析</h3>
+                        <div style="margin: 15px 0;">
+                            <label>按题目筛选: </label>
+                            <select id="problemFilter" onchange="filterFiles()">
+                                <option value="">全部题目</option>
+                            </select>
+                        </div>
+                        <div id="fileAnalysisContent"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 引入D3.js库 -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        let currentData = null;
+        let filteredData = null;
+        let graphData = null;
+        let simulation = null;
+
+        // 切换标签页
+        function switchTab(tabName) {
+            // 隐藏所有内容
+            document.querySelectorAll('.section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // 显示选中的内容
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // 如果数据已加载，更新当前页面的内容
+            if (currentData) {
+                updateCurrentTabContent(tabName);
+            }
+        }
+
+        // 文件上传处理
+        document.getElementById('jsonFile').addEventListener('change', handleJsonUpload);
+        document.getElementById('jsonUploadArea').addEventListener('dragover', handleDragOver);
+        document.getElementById('jsonUploadArea').addEventListener('drop', handleDrop);
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+
+        function handleJsonUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    console.log('JSON数据加载成功:', data);
+                    currentData = data;
+                    displayReport(data);
+                    showSuccess('JSON文件加载成功！');
+                } catch (error) {
+                    console.error('JSON解析错误:', error);
+                    showError('JSON文件格式错误: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function displayReport(data) {
+            console.log('displayReport被调用，数据:', data);
+            
+            currentData = data;
+            filteredData = data;
+            
+            // 显示所有页面的内容
+            const overviewContent = document.getElementById('overviewContent');
+            const suspiciousContent = document.getElementById('suspiciousContent');
+            const keywordsContent = document.getElementById('keywordsContent');
+            const filesContent = document.getElementById('filesContent');
+            const graphContent = document.getElementById('graphContent');
+            
+            console.log('DOM元素检查:');
+            console.log('overviewContent:', overviewContent);
+            console.log('suspiciousContent:', suspiciousContent);
+            console.log('keywordsContent:', keywordsContent);
+            console.log('filesContent:', filesContent);
+            console.log('graphContent:', graphContent);
+            
+            if (overviewContent) {
+                overviewContent.classList.remove('hidden');
+                console.log('overviewContent已显示');
+            }
+            if (suspiciousContent) {
+                suspiciousContent.classList.remove('hidden');
+                console.log('suspiciousContent已显示');
+            }
+            if (keywordsContent) {
+                keywordsContent.classList.remove('hidden');
+                console.log('keywordsContent已显示');
+            }
+            if (filesContent) {
+                filesContent.classList.remove('hidden');
+                console.log('filesContent已显示');
+            }
+            if (graphContent) {
+                graphContent.classList.remove('hidden');
+                console.log('graphContent已显示');
+            }
+            
+            // 更新所有页面内容
+            updateAllTabContent();
+        }
+
+        function updateAllTabContent() {
+            console.log('开始更新所有标签页内容');
+            console.log('当前数据:', currentData);
+            
+            displayStats(currentData);
+            displayProblemOverview(currentData);
+            displaySuspiciousPairs(currentData);
+            displaySpecialKeywords(currentData);
+            displayFileAnalysis(currentData);
+            updateFilters();
+            updateGraphFilters();
+            
+            console.log('所有标签页内容更新完成');
+        }
+
+        function updateCurrentTabContent(tabName) {
+            switch(tabName) {
+                case 'overview':
+                    displayStats(currentData);
+                    displayProblemOverview(currentData);
+                    break;
+                case 'suspicious':
+                    displaySuspiciousPairs(currentData);
+                    break;
+                case 'graph':
+                    updateGraph();
+                    break;
+                case 'keywords':
+                    displaySpecialKeywords(currentData);
+                    break;
+                case 'files':
+                    displayFileAnalysis(currentData);
+                    break;
+            }
+        }
+
+        function displayStats(data) {
+            const statsGrid = document.getElementById('statsGrid');
+            if (!statsGrid) {
+                console.log('statsGrid元素不存在');
+                return;
+            }
+            
+            console.log('显示统计信息，数据:', data);
+            
+            let totalFiles = 0;
+            let totalSuspicious = 0;
+            let totalProblems = Object.keys(data.problems || {}).length;
+
+            if (data.problems) {
+                Object.values(data.problems).forEach(problem => {
+                    totalFiles += problem.total_files || 0;
+                    totalSuspicious += problem.suspicious_pairs ? problem.suspicious_pairs.length : 0;
+                });
+            }
+
+            console.log(`统计结果: 题目=${totalProblems}, 文件=${totalFiles}, 可疑=${totalSuspicious}`);
+
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-number">${totalProblems}</div>
+                    <div class="stat-label">题目数量</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${totalFiles}</div>
+                    <div class="stat-label">文件总数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${totalSuspicious}</div>
+                    <div class="stat-label">可疑抄袭对</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">${data.contest_name || '未知'}</div>
+                    <div class="stat-label">比赛名称</div>
+                </div>
+            `;
+        }
+
+        function displaySpecialKeywords(data) {
+            const content = document.getElementById('specialKeywordsContent');
+            if (!content) return;
+            
+            let specialKeywordsFound = [];
+            if (data.problems) {
+                Object.entries(data.problems).forEach(([problemName, problem]) => {
+                    Object.entries(problem.file_features || {}).forEach(([filename, features]) => {
+                        if (features.special_keywords && Object.keys(features.special_keywords).length > 0) {
+                            specialKeywordsFound.push({
+                                problem: problemName,
+                                file: filename,
+                                keywords: features.special_keywords
+                            });
+                        }
+                    });
+                });
+            }
+
+            if (specialKeywordsFound.length > 0) {
+                content.innerHTML = specialKeywordsFound.map(item => `
+                    <div class="card warning">
+                        <h4>题目: ${item.problem} | 文件: ${item.file}</h4>
+                        ${Object.entries(item.keywords).map(([keyword, lines]) => `
+                            <div style="margin: 10px 0;">
+                                <strong>关键词: ${keyword}</strong>
+                                <div style="margin-left: 20px; font-family: monospace; background: #f8f9fa; padding: 10px; border-radius: 5px;">
+                                    ${lines.map(line => `<div>${line}</div>`).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `).join('');
+            } else {
+                content.innerHTML = '<div class="card success"><h4>✅ 未发现特殊关键词</h4></div>';
+            }
+        }
+
+        function displayProblemOverview(data) {
+            const content = document.getElementById('problemOverview');
+            if (!content) return;
+            
+            if (data.problems) {
+                content.innerHTML = Object.entries(data.problems).map(([problemName, problem]) => `
+                    <div class="card">
+                        <h4>题目: ${problemName}</h4>
+                        <div class="file-info">
+                            <div class="info-item">
+                                <div class="info-label">文件数量</div>
+                                <div>${problem.total_files || 0}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">可疑抄袭对</div>
+                                <div>${problem.suspicious_pairs ? problem.suspicious_pairs.length : 0}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">特殊关键词文件</div>
+                                <div>${countSpecialKeywordsFiles(problem)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function countSpecialKeywordsFiles(problem) {
+            let count = 0;
+            if (problem.file_features) {
+                Object.values(problem.file_features).forEach(features => {
+                    if (features.special_keywords && Object.keys(features.special_keywords).length > 0) {
+                        count++;
+                    }
+                });
+            }
+            return count;
+        }
+
+        function displaySuspiciousPairs(data) {
+            const content = document.getElementById('suspiciousPairsContent');
+            if (!content) return;
+            
+            let allSuspiciousPairs = [];
+            if (data.problems) {
+                Object.entries(data.problems).forEach(([problemName, problem]) => {
+                    if (problem.suspicious_pairs) {
+                        problem.suspicious_pairs.forEach(pair => {
+                            allSuspiciousPairs.push({
+                                ...pair,
+                                problem: problemName
+                            });
+                        });
+                    }
+                });
+            }
+
+            if (allSuspiciousPairs.length > 0) {
+                content.innerHTML = allSuspiciousPairs
+                    .sort((a, b) => b.overall_similarity - a.overall_similarity)
+                    .map(pair => `
+                        <div class="card suspicious">
+                            <h4>题目: ${pair.problem}</h4>
+                            <div class="file-info">
+                                <div class="info-item">
+                                    <div class="info-label">文件1</div>
+                                    <div>${pair.file1}</div>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">文件2</div>
+                                    <div>${pair.file2}</div>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">综合相似度</div>
+                                    <div>${(pair.overall_similarity * 100).toFixed(1)}%</div>
+                                </div>
+                            </div>
+                            <div class="similarity-bar">
+                                <div class="similarity-fill" style="width: ${pair.overall_similarity * 100}%"></div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 15px;">
+                                <div class="info-item">
+                                    <div class="info-label">序列相似度</div>
+                                    <div>${(pair.sequence_similarity * 100).toFixed(1)}%</div>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">TF-IDF相似度</div>
+                                    <div>${(pair.tfidf_similarity * 100).toFixed(1)}%</div>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">变量相似度</div>
+                                    <div>${(pair.variable_similarity * 100).toFixed(1)}%</div>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">函数相似度</div>
+                                    <div>${(pair.function_similarity * 100).toFixed(1)}%</div>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">结构相似度</div>
+                                    <div>${(pair.structure_similarity * 100).toFixed(1)}%</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+            } else {
+                content.innerHTML = '<div class="card success"><h4>✅ 未发现可疑抄袭对</h4></div>';
+            }
+        }
+
+        function displayFileAnalysis(data) {
+            const content = document.getElementById('fileAnalysisContent');
+            if (!content) return;
+            
+            if (data.problems) {
+                content.innerHTML = Object.entries(data.problems).map(([problemName, problem]) => `
+                    <div class="problem-section">
+                        <div class="problem-header">题目: ${problemName}</div>
+                        <div class="problem-content">
+                            ${Object.entries(problem.file_features || {}).map(([filename, features]) => `
+                                <div class="card">
+                                    <h4>题目: ${problemName} | 文件: ${filename}</h4>
+                                    <div class="file-info">
+                                        <div class="info-item">
+                                            <div class="info-label">代码长度</div>
+                                            <div>${features.length} 字符</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">代码行数</div>
+                                            <div>${features.lines} 行</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">变量数量</div>
+                                            <div>${features.variables ? features.variables.length : 0}</div>
+                                        </div>
+                                        <div class="info-item">
+                                            <div class="info-label">函数数量</div>
+                                            <div>${features.functions ? features.functions.length : 0}</div>
+                                        </div>
+                                    </div>
+                                    ${features.variables && features.variables.length > 0 ? `
+                                        <div style="margin: 15px 0;">
+                                            <strong>变量列表:</strong>
+                                            <div style="font-family: monospace; background: #f8f9fa; padding: 10px; border-radius: 5px; margin-top: 5px;">
+                                                ${features.variables.slice(0, 10).join(', ')}
+                                                ${features.variables.length > 10 ? `... (还有 ${features.variables.length - 10} 个)` : ''}
+                                            </div>
+                                        </div>
+                                    ` : ''}
+                                    ${features.functions && features.functions.length > 0 ? `
+                                        <div style="margin: 15px 0;">
+                                            <strong>函数列表:</strong>
+                                            <div style="font-family: monospace; background: #f8f9fa; padding: 10px; border-radius: 5px; margin-top: 5px;">
+                                                ${features.functions.slice(0, 10).join(', ')}
+                                                ${features.functions.length > 10 ? `... (还有 ${features.functions.length - 10} 个)` : ''}
+                                            </div>
+                                        </div>
+                                    ` : ''}
+                                    ${features.special_keywords && Object.keys(features.special_keywords).length > 0 ? `
+                                        <div style="margin: 15px 0;">
+                                            <strong>⚠️ 特殊关键词和注释:</strong>
+                                            ${Object.entries(features.special_keywords).map(([keyword, lines]) => `
+                                                <div style="margin: 10px 0;">
+                                                    <strong>${keyword}:</strong>
+                                                    <div style="margin-left: 20px; font-family: monospace; background: #f8f9fa; padding: 10px; border-radius: 5px;">
+                                                        ${lines.map(line => `<div>${line}</div>`).join('')}
+                                                    </div>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
+                                    <div style="margin-top: 15px;">
+                                        <strong>代码哈希:</strong> <span style="font-family: monospace;">${features.hash}</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+            document.querySelector('.content').insertBefore(errorDiv, document.querySelector('.content').firstChild);
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        // 搜索功能
+        function searchData() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            if (!searchTerm) {
+                showError('请输入搜索关键词');
+                return;
+            }
+
+            const results = [];
+            if (currentData && currentData.problems) {
+                Object.entries(currentData.problems).forEach(([problemName, problem]) => {
+                    Object.entries(problem.file_features || {}).forEach(([filename, features]) => {
+                        if (filename.toLowerCase().includes(searchTerm) || 
+                            (features.variables && features.variables.some(v => v.toLowerCase().includes(searchTerm))) ||
+                            (features.functions && features.functions.some(f => f.toLowerCase().includes(searchTerm))) ||
+                            (features.special_keywords && Object.keys(features.special_keywords).some(k => k.toLowerCase().includes(searchTerm)))) {
+                            results.push({
+                                problem: problemName,
+                                file: filename,
+                                features: features
+                            });
+                        }
+                    });
+                });
+            }
+
+            displaySearchResults(results, searchTerm);
+        }
+
+        function displaySearchResults(results, searchTerm) {
+            const content = document.getElementById('searchResults');
+            if (!content) return;
+            
+            if (results.length > 0) {
+                content.innerHTML = `
+                    <div class="card">
+                        <h4>🔍 搜索结果: "${searchTerm}" (找到 ${results.length} 个结果)</h4>
+                        ${results.map(item => `
+                            <div class="card" style="margin: 10px 0;">
+                                <h5>题目: ${item.problem} | 文件: ${item.file}</h5>
+                                <div class="file-info">
+                                    <div class="info-item">
+                                        <div class="info-label">代码长度</div>
+                                        <div>${item.features.length} 字符</div>
+                                    </div>
+                                    <div class="info-item">
+                                        <div class="info-label">代码行数</div>
+                                        <div>${item.features.lines} 行</div>
+                                    </div>
+                                    <div class="info-item">
+                                        <div class="info-label">变量数量</div>
+                                        <div>${item.features.variables ? item.features.variables.length : 0}</div>
+                                    </div>
+                                    <div class="info-item">
+                                        <div class="info-label">函数数量</div>
+                                        <div>${item.features.functions ? item.features.functions.length : 0}</div>
+                                    </div>
+                                </div>
+                                ${item.features.special_keywords && Object.keys(item.features.special_keywords).length > 0 ? `
+                                    <div style="margin: 10px 0;">
+                                        <strong>⚠️ 特殊关键词:</strong>
+                                        ${Object.entries(item.features.special_keywords).map(([keyword, lines]) => `
+                                            <div style="margin: 5px 0;">
+                                                <strong>${keyword}:</strong>
+                                                <div style="margin-left: 15px; font-family: monospace; background: #f8f9fa; padding: 5px; border-radius: 3px; font-size: 0.9em;">
+                                                    ${lines.slice(0, 3).map(line => `<div>${line}</div>`).join('')}
+                                                    ${lines.length > 3 ? `<div>... (还有 ${lines.length - 3} 行)</div>` : ''}
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                content.innerHTML = '<div class="card"><h4>🔍 未找到匹配的结果</h4></div>';
+            }
+        }
+
+        function clearSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const searchResults = document.getElementById('searchResults');
+            if (searchInput) searchInput.value = '';
+            if (searchResults) searchResults.innerHTML = '';
+        }
+
+        // 筛选功能
+        function filterSuspicious() {
+            const similarityFilter = document.getElementById('similarityFilter');
+            if (!similarityFilter) return;
+            
+            const filterValue = parseFloat(similarityFilter.value);
+            if (!currentData) return;
+
+            let allSuspiciousPairs = [];
+            if (currentData.problems) {
+                Object.entries(currentData.problems).forEach(([problemName, problem]) => {
+                    if (problem.suspicious_pairs) {
+                        problem.suspicious_pairs.forEach(pair => {
+                            if (pair.overall_similarity >= filterValue) {
+                                allSuspiciousPairs.push({
+                                    ...pair,
+                                    problem: problemName
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+
+            displaySuspiciousPairs({ problems: { filtered: { suspicious_pairs: allSuspiciousPairs } } });
+        }
+
+        function filterKeywords() {
+            const keywordFilter = document.getElementById('keywordFilter');
+            if (!keywordFilter) return;
+            
+            const filterValue = keywordFilter.value;
+            if (!currentData) return;
+
+            let filteredKeywords = [];
+            if (currentData.problems) {
+                Object.entries(currentData.problems).forEach(([problemName, problem]) => {
+                    Object.entries(problem.file_features || {}).forEach(([filename, features]) => {
+                        if (features.special_keywords) {
+                            const filteredKeywordsData = {};
+                            Object.entries(features.special_keywords).forEach(([keyword, lines]) => {
+                                if (!filterValue || keyword.includes(filterValue)) {
+                                    filteredKeywordsData[keyword] = lines;
+                                }
+                            });
+                            if (Object.keys(filteredKeywordsData).length > 0) {
+                                filteredKeywords.push({
+                                    problem: problemName,
+                                    file: filename,
+                                    keywords: filteredKeywordsData
+                                });
+                            }
+                        }
+                    });
+                });
+            }
+
+            displaySpecialKeywords({ problems: { filtered: { file_features: filteredKeywords } } });
+        }
+
+        function filterFiles() {
+            const problemFilter = document.getElementById('problemFilter');
+            if (!problemFilter) return;
+            
+            const filterValue = problemFilter.value;
+            if (!currentData) return;
+
+            if (!filterValue) {
+                displayFileAnalysis(currentData);
+            } else {
+                const filteredData = {
+                    problems: {
+                        [filterValue]: currentData.problems[filterValue]
+                    }
+                };
+                displayFileAnalysis(filteredData);
+            }
+        }
+
+        function updateFilters() {
+            // 更新题目筛选器
+            const problemFilter = document.getElementById('problemFilter');
+            if (problemFilter) {
+                problemFilter.innerHTML = '<option value="">全部题目</option>';
+                if (currentData && currentData.problems) {
+                    Object.keys(currentData.problems).forEach(problemName => {
+                        problemFilter.innerHTML += `<option value="${problemName}">${problemName}</option>`;
+                    });
+                }
+            }
+        }
+
+        function updateGraphFilters() {
+            // 更新图形筛选器
+            const graphProblemFilter = document.getElementById('graphProblemFilter');
+            if (graphProblemFilter) {
+                graphProblemFilter.innerHTML = '<option value="">全部题目</option>';
+                if (currentData && currentData.problems) {
+                    Object.keys(currentData.problems).forEach(problemName => {
+                        graphProblemFilter.innerHTML += `<option value="${problemName}">${problemName}</option>`;
+                    });
+                }
+            }
+        }
+
+        // 图形相关函数
+        function updateGraph() {
+            if (!currentData) return;
+            
+            const problemFilter = document.getElementById('graphProblemFilter').value;
+            const similarityFilter = parseFloat(document.getElementById('graphSimilarityFilter').value);
+            
+            // 生成图形数据
+            const graphData = generateGraphData(problemFilter, similarityFilter);
+            
+            // 显示图形
+            displayGraph(graphData);
+            
+            // 显示统计信息
+            displayGraphStats(graphData);
+        }
+
+        function generateGraphData(problemFilter, similarityFilter) {
+            const nodes = new Map();
+            const links = [];
+            
+            if (currentData && currentData.problems) {
+                Object.entries(currentData.problems).forEach(([problemName, problem]) => {
+                    // 如果指定了题目筛选，跳过其他题目
+                    if (problemFilter && problemName !== problemFilter) return;
+                    
+                    if (problem.suspicious_pairs) {
+                        problem.suspicious_pairs.forEach(pair => {
+                            // 如果相似度低于阈值，跳过
+                            if (pair.overall_similarity < similarityFilter) return;
+                            
+                            // 提取文件名（去掉扩展名和分数）
+                            const file1Name = extractStudentName(pair.file1);
+                            const file2Name = extractStudentName(pair.file2);
+                            
+                            // 添加节点
+                            if (!nodes.has(file1Name)) {
+                                nodes.set(file1Name, {
+                                    id: file1Name,
+                                    name: file1Name,
+                                    problems: new Set(),
+                                    totalSimilarity: 0,
+                                    connections: 0
+                                });
+                            }
+                            if (!nodes.has(file2Name)) {
+                                nodes.set(file2Name, {
+                                    id: file2Name,
+                                    name: file2Name,
+                                    problems: new Set(),
+                                    totalSimilarity: 0,
+                                    connections: 0
+                                });
+                            }
+                            
+                            // 更新节点信息
+                            const node1 = nodes.get(file1Name);
+                            const node2 = nodes.get(file2Name);
+                            node1.problems.add(problemName);
+                            node2.problems.add(problemName);
+                            node1.totalSimilarity += pair.overall_similarity;
+                            node2.totalSimilarity += pair.overall_similarity;
+                            node1.connections++;
+                            node2.connections++;
+                            
+                            // 添加连接
+                            links.push({
+                                source: file1Name,
+                                target: file2Name,
+                                similarity: pair.overall_similarity,
+                                problem: problemName,
+                                file1: pair.file1,
+                                file2: pair.file2
+                            });
+                        });
+                    }
+                });
+            }
+            
+            return {
+                nodes: Array.from(nodes.values()),
+                links: links
+            };
+        }
+
+        function extractStudentName(filename) {
+            // 提取学生姓名，去掉分数和扩展名
+            return filename.replace(/_\d+分\.txt$/, '').replace(/\.txt$/, '');
+        }
+
+        function displayGraph(graphData) {
+            const container = document.getElementById('graphContainer');
+            container.innerHTML = '';
+            
+            if (graphData.nodes.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 50px; color: #666;">暂无抄袭关系数据</div>';
+                return;
+            }
+            
+            const width = container.clientWidth;
+            const height = Math.max(600, container.clientHeight || 600);
+            
+            // 创建SVG
+            const svg = d3.select(container)
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+            
+            // 创建缩放功能
+            const zoom = d3.zoom()
+                .scaleExtent([0.1, 4])
+                .on('zoom', (event) => {
+                    svg.select('.links').attr('transform', event.transform);
+                    svg.select('.nodes').attr('transform', event.transform);
+                });
+            
+            // 应用缩放功能到SVG
+            svg.call(zoom);
+            
+            // 创建力导向图
+            simulation = d3.forceSimulation(graphData.nodes)
+                .force('link', d3.forceLink(graphData.links).id(d => d.id).distance(80))
+                .force('charge', d3.forceManyBody().strength(-150))
+                .force('center', d3.forceCenter(width / 2, height / 2))
+                .force('collision', d3.forceCollide().radius(35))
+                .alphaDecay(0.02)
+                .velocityDecay(0.4);
+            
+            // 创建连接线
+            const link = svg.append('g')
+                .attr('class', 'links')
+                .selectAll('line')
+                .data(graphData.links)
+                .enter().append('line')
+                .attr('stroke', d => getLinkColor(d.similarity))
+                .attr('stroke-width', d => Math.max(1, d.similarity * 5))
+                .attr('opacity', 0.6);
+            
+            // 创建节点
+            const node = svg.append('g')
+                .attr('class', 'nodes')
+                .selectAll('g')
+                .data(graphData.nodes)
+                .enter().append('g')
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+            
+            // 添加节点圆圈
+            node.append('circle')
+                .attr('r', d => Math.max(8, Math.min(20, d.connections * 3)))
+                .attr('fill', d => getNodeColor(d.connections))
+                .attr('stroke', '#fff')
+                .attr('stroke-width', 2);
+            
+            // 添加节点标签
+            node.append('text')
+                .text(d => d.name)
+                .attr('x', 0)
+                .attr('y', 25)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '12px')
+                .attr('fill', '#333');
+            
+            // 添加连接数标签
+            node.append('text')
+                .text(d => d.connections)
+                .attr('x', 0)
+                .attr('y', 0)
+                .attr('text-anchor', 'middle')
+                .attr('font-size', '10px')
+                .attr('fill', '#fff')
+                .attr('font-weight', 'bold');
+            
+            // 添加工具提示
+            node.append('title')
+                .text(d => `${d.name}\n连接数: ${d.connections}\n涉及题目: ${Array.from(d.problems).join(', ')}\n平均相似度: ${(d.totalSimilarity / d.connections * 100).toFixed(1)}%`);
+            
+            link.append('title')
+                .text(d => `${d.file1} ↔ ${d.file2}\n相似度: ${(d.similarity * 100).toFixed(1)}%\n题目: ${d.problem}`);
+            
+            // 更新位置
+            simulation.on('tick', () => {
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+                
+                node
+                    .attr('transform', d => `translate(${d.x},${d.y})`);
+            });
+            
+            // 添加重置视图按钮
+            const resetButton = document.createElement('button');
+            resetButton.textContent = '重置视图';
+            resetButton.className = 'upload-btn';
+            resetButton.style.position = 'absolute';
+            resetButton.style.top = '10px';
+            resetButton.style.right = '10px';
+            resetButton.onclick = () => {
+                svg.transition().duration(750).call(
+                    zoom.transform,
+                    d3.zoomIdentity
+                );
+            };
+            container.style.position = 'relative';
+            container.appendChild(resetButton);
+            
+            // 添加使用说明
+            const helpDiv = document.createElement('div');
+            helpDiv.innerHTML = `
+                <div style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; font-size: 12px; max-width: 200px;">
+                    <strong>操作说明:</strong><br>
+                    • 鼠标滚轮: 缩放<br>
+                    • 拖拽空白处: 平移<br>
+                    • 拖拽节点: 移动节点<br>
+                    • 点击"重置视图": 恢复默认视图
+                </div>
+            `;
+            container.appendChild(helpDiv);
+            
+            // 拖拽函数
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+            
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+            
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+        }
+
+        function getNodeColor(connections) {
+            if (connections >= 5) return '#dc3545'; // 红色 - 高度可疑
+            if (connections >= 3) return '#ffc107'; // 黄色 - 中等可疑
+            if (connections >= 2) return '#fd7e14'; // 橙色 - 轻微可疑
+            return '#28a745'; // 绿色 - 正常
+        }
+
+        function getLinkColor(similarity) {
+            if (similarity >= 0.9) return '#dc3545'; // 红色 - 高度相似
+            if (similarity >= 0.8) return '#fd7e14'; // 橙色 - 高相似
+            if (similarity >= 0.7) return '#ffc107'; // 黄色 - 中等相似
+            return '#28a745'; // 绿色 - 低相似
+        }
+
+        function displayGraphStats(graphData) {
+            const statsDiv = document.getElementById('graphStats');
+            
+            if (graphData.nodes.length === 0) {
+                statsDiv.innerHTML = '<div class="card"><h4>📊 图形统计</h4><p>暂无数据</p></div>';
+                return;
+            }
+            
+            const totalNodes = graphData.nodes.length;
+            const totalLinks = graphData.links.length;
+            const avgSimilarity = graphData.links.reduce((sum, link) => sum + link.similarity, 0) / totalLinks;
+            const maxConnections = Math.max(...graphData.nodes.map(n => n.connections));
+            const highlySuspicious = graphData.nodes.filter(n => n.connections >= 3).length;
+            
+            statsDiv.innerHTML = `
+                <div class="card">
+                    <h4>📊 图形统计</h4>
+                    <div class="file-info">
+                        <div class="info-item">
+                            <div class="info-label">涉及学生</div>
+                            <div>${totalNodes} 人</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">抄袭关系</div>
+                            <div>${totalLinks} 个</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">平均相似度</div>
+                            <div>${(avgSimilarity * 100).toFixed(1)}%</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">最高连接数</div>
+                            <div>${maxConnections}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">高度可疑</div>
+                            <div>${highlySuspicious} 人</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <h5>🔍 图例说明:</h5>
+                        <div style="display: flex; gap: 20px; margin-top: 10px;">
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: #dc3545;"></div>
+                                <span>高度可疑 (≥5连接)</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: #ffc107;"></div>
+                                <span>中等可疑 (3-4连接)</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: #fd7e14;"></div>
+                                <span>轻微可疑 (2连接)</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <div style="width: 12px; height: 12px; border-radius: 50%; background: #28a745;"></div>
+                                <span>正常 (1连接)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success';
+            successDiv.textContent = message;
+            document.querySelector('.content').insertBefore(successDiv, document.querySelector('.content').firstChild);
+            setTimeout(() => successDiv.remove(), 3000);
+        }
+    </script>
+</body>
+</html> 
