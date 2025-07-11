@@ -335,7 +335,7 @@
     <div class="container">
         <div class="header">
             <h1>🔍 反抄袭检测结果查看器</h1>
-            <p>上传JSON文件查看检测结果，或上传两份代码进行对比分析</p>
+            <p>对比赛结果进行汇总分析</p>
         </div>
 
         <div class="tabs">
@@ -389,10 +389,13 @@
                             <label>按相似度筛选: </label>
                             <select id="similarityFilter" onchange="filterSuspicious()">
                                 <option value="0">全部</option>
+                                <option value="0.5">50%以上</option>
                                 <option value="0.7">70%以上</option>
                                 <option value="0.8">80%以上</option>
                                 <option value="0.9">90%以上</option>
                             </select>
+                            <label style="margin-left: 20px;">最低分: </label>
+                            <input type="number" id="minScoreFilter" value="0" min="0" style="width: 60px;" onchange="filterSuspicious()">
                         </div>
                         <div id="suspiciousPairsContent"></div>
                     </div>
@@ -435,11 +438,18 @@
                             <label style="margin-left: 20px;">按相似度筛选: </label>
                             <select id="graphSimilarityFilter" onchange="updateGraph()">
                                 <option value="0">全部</option>
+                                <option value="0.5">50%以上</option>
                                 <option value="0.7">70%以上</option>
                                 <option value="0.8">80%以上</option>
                                 <option value="0.9">90%以上</option>
                                 <option value="0.95">95%以上</option>
                             </select>
+                            <label style="margin-left: 20px;">
+                                <input type="checkbox" id="hideZeroScore" onchange="updateGraph()">
+                                隐藏0分文件
+                            </label>
+                            <label style="margin-left: 20px;">最低分: </label>
+                            <input type="number" id="graphMinScoreFilter" value="0" min="0" style="width: 60px;" onchange="updateGraph()">
                         </div>
                         <div id="graphContainer" style="width: 100%; height: 600px; border: 1px solid #ddd; border-radius: 5px; background: #f8f9fa;"></div>
                         <div id="graphStats" style="margin-top: 15px;"></div>
@@ -617,46 +627,109 @@
             }
         }
 
+        // 在总览页面添加分数统计和查询
         function displayStats(data) {
             const statsGrid = document.getElementById('statsGrid');
             if (!statsGrid) {
                 console.log('statsGrid元素不存在');
                 return;
             }
-            
-            console.log('显示统计信息，数据:', data);
-            
-            let totalFiles = 0;
-            let totalSuspicious = 0;
-            let totalProblems = Object.keys(data.problems || {}).length;
-
+            // 统计分数信息
+            let userScores = {};
+            let problemMaxScore = {};
+            let problemSumScore = {};
+            let problemCount = {};
+            let allScores = [];
             if (data.problems) {
-                Object.values(data.problems).forEach(problem => {
-                    totalFiles += problem.total_files || 0;
-                    totalSuspicious += problem.suspicious_pairs ? problem.suspicious_pairs.length : 0;
+                Object.entries(data.problems).forEach(([problemName, problem]) => {
+                    problemMaxScore[problemName] = 0;
+                    problemSumScore[problemName] = 0;
+                    problemCount[problemName] = 0;
+                    Object.keys(problem.file_features || {}).forEach(filename => {
+                        const score = extractScore(filename);
+                        // 统计每个用户的总分
+                        const user = extractStudentName(filename);
+                        if (!userScores[user]) userScores[user] = { total: 0, perProblem: {} };
+                        userScores[user].total += score;
+                        userScores[user].perProblem[problemName] = score;
+                        // 统计题目分数
+                        problemSumScore[problemName] += score;
+                        problemCount[problemName]++;
+                        if (score > problemMaxScore[problemName]) problemMaxScore[problemName] = score;
+                        allScores.push(score);
+                    });
                 });
             }
-
-            console.log(`统计结果: 题目=${totalProblems}, 文件=${totalFiles}, 可疑=${totalSuspicious}`);
-
+            // 平均分
+            const avgScore = allScores.length ? (allScores.reduce((a,b)=>a+b,0)/allScores.length).toFixed(2) : 0;
+            // 分数分布统计
+            const bins = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+            let hist = Array(bins.length-1).fill(0);
+            allScores.forEach(s => {
+                for(let i=0;i<bins.length-1;i++){
+                    if(s>=bins[i] && s<bins[i+1]){ hist[i]++; break; }
+                    if(s===100 && i===bins.length-2){ hist[i]++; break; }
+                }
+            });
+            // 每题得分率
+            let problemRates = Object.keys(problemSumScore).map(pn=>{
+                const max = problemMaxScore[pn]||1;
+                const avg = problemCount[pn]? (problemSumScore[pn]/problemCount[pn]) : 0;
+                return {name: pn, rate: ((avg/(max||1))*100).toFixed(1), avg: avg.toFixed(2), max};
+            });
+            // 排名
+            let userRank = Object.entries(userScores).map(([user,info])=>({user,total:info.total,perProblem:info.perProblem}));
+            userRank.sort((a,b)=>b.total-a.total);
+            userRank.forEach((u,i)=>u.rank=i+1);
+            // 渲染
             statsGrid.innerHTML = `
                 <div class="stat-card">
-                    <div class="stat-number">${totalProblems}</div>
+                    <div class="stat-number">${Object.keys(problemSumScore).length}</div>
                     <div class="stat-label">题目数量</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number">${totalFiles}</div>
-                    <div class="stat-label">文件总数</div>
+                    <div class="stat-number">${userRank.length}</div>
+                    <div class="stat-label">参赛人数</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number">${totalSuspicious}</div>
-                    <div class="stat-label">可疑抄袭对</div>
+                    <div class="stat-number">${avgScore}</div>
+                    <div class="stat-label">全场平均分</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number">${data.contest_name || '未知'}</div>
-                    <div class="stat-label">比赛名称</div>
+                    <canvas id="scoreHist" width="180" height="80"></canvas>
+                    <div class="stat-label">分数分布</div>
                 </div>
             `;
+            // 绘制分数分布图
+            setTimeout(()=>{
+                const ctx = document.getElementById('scoreHist').getContext('2d');
+                ctx.clearRect(0,0,180,80);
+                const maxH = Math.max(...hist,1);
+                for(let i=0;i<hist.length;i++){
+                    ctx.fillStyle = '#667eea';
+                    ctx.fillRect(i*16+10, 80-hist[i]/maxH*60, 12, hist[i]/maxH*60);
+                    ctx.fillStyle = '#333';
+                    ctx.font = '10px sans-serif';
+                    ctx.fillText(bins[i]+(i===hist.length-1?'+':''), i*16+10, 78);
+                }
+            },100);
+            // 每题得分率
+            const rateHtml = problemRates.map(r=>`<div style="margin:4px 0;">${r.name}：平均${r.avg}分，得分率${r.rate}%（满分${r.max}）</div>`).join('');
+            statsGrid.innerHTML += `<div class="stat-card" style="grid-column:1/-1;text-align:left;"><div style="font-weight:bold;">每道题得分率</div>${rateHtml}</div>`;
+            // 用户名查询排名
+            statsGrid.innerHTML += `
+                <div class="stat-card" style="grid-column:1/-1;">
+                    <div style="font-weight:bold;">查询用户排名</div>
+                    <div style="margin:10px 0;">
+                        <input id="userQueryInput" type="text" placeholder="输入用户名/学号/姓名" style="padding:5px 10px;border-radius:5px;border:1px solid #ccc;width:180px;">
+                        <button class="upload-btn" style="padding:5px 15px;font-size:1em;" onclick="queryUserRank()">查询</button>
+                    </div>
+                    <div id="userQueryResult"></div>
+                </div>
+            `;
+            // 保存排名数据供查询
+            window._userRankData = userRank;
+            window._userRankProblems = Object.keys(problemSumScore);
         }
 
         function displaySpecialKeywords(data) {
@@ -979,40 +1052,40 @@
         // 筛选功能
         function filterSuspicious() {
             const similarityFilter = document.getElementById('similarityFilter');
-            if (!similarityFilter) return;
-            
+            const minScoreFilter = document.getElementById('minScoreFilter');
+            if (!similarityFilter || !minScoreFilter) return;
             const filterValue = parseFloat(similarityFilter.value);
+            const minScore = parseInt(minScoreFilter.value) || 0;
             if (!currentData) return;
-
-            let allSuspiciousPairs = [];
+            // 按题目分组
+            const problems = {};
             if (currentData.problems) {
                 Object.entries(currentData.problems).forEach(([problemName, problem]) => {
                     if (problem.suspicious_pairs) {
-                        problem.suspicious_pairs.forEach(pair => {
-                            if (pair.overall_similarity >= filterValue) {
-                                allSuspiciousPairs.push({
-                                    ...pair,
-                                    problem: problemName
-                                });
-                            }
+                        const filteredPairs = problem.suspicious_pairs.filter(pair => {
+                            const file1Score = extractScore(pair.file1);
+                            const file2Score = extractScore(pair.file2);
+                            return pair.overall_similarity >= filterValue && file1Score >= minScore && file2Score >= minScore;
                         });
+                        if (filteredPairs.length > 0) {
+                            problems[problemName] = { suspicious_pairs: filteredPairs };
+                        }
                     }
                 });
             }
-
-            displaySuspiciousPairs({ problems: { filtered: { suspicious_pairs: allSuspiciousPairs } } });
+            displaySuspiciousPairs({problems});
         }
 
         function filterKeywords() {
             const keywordFilter = document.getElementById('keywordFilter');
             if (!keywordFilter) return;
-            
             const filterValue = keywordFilter.value;
             if (!currentData) return;
-
-            let filteredKeywords = [];
+            // 按题目分组
+            const problems = {};
             if (currentData.problems) {
                 Object.entries(currentData.problems).forEach(([problemName, problem]) => {
+                    const file_features = {};
                     Object.entries(problem.file_features || {}).forEach(([filename, features]) => {
                         if (features.special_keywords) {
                             const filteredKeywordsData = {};
@@ -1022,18 +1095,19 @@
                                 }
                             });
                             if (Object.keys(filteredKeywordsData).length > 0) {
-                                filteredKeywords.push({
-                                    problem: problemName,
-                                    file: filename,
-                                    keywords: filteredKeywordsData
-                                });
+                                file_features[filename] = {
+                                    ...features,
+                                    special_keywords: filteredKeywordsData
+                                };
                             }
                         }
                     });
+                    if (Object.keys(file_features).length > 0) {
+                        problems[problemName] = { file_features };
+                    }
                 });
             }
-
-            displaySpecialKeywords({ problems: { filtered: { file_features: filteredKeywords } } });
+            displaySpecialKeywords({ problems });
         }
 
         function filterFiles() {
@@ -1087,9 +1161,11 @@
             
             const problemFilter = document.getElementById('graphProblemFilter').value;
             const similarityFilter = parseFloat(document.getElementById('graphSimilarityFilter').value);
+            const hideZeroScore = document.getElementById('hideZeroScore').checked;
+            const minScore = parseInt(document.getElementById('graphMinScoreFilter').value) || 0;
             
             // 生成图形数据
-            const graphData = generateGraphData(problemFilter, similarityFilter);
+            const graphData = generateGraphData(problemFilter, similarityFilter, hideZeroScore, minScore);
             
             // 显示图形
             displayGraph(graphData);
@@ -1098,7 +1174,7 @@
             displayGraphStats(graphData);
         }
 
-        function generateGraphData(problemFilter, similarityFilter) {
+        function generateGraphData(problemFilter, similarityFilter, hideZeroScore, minScore) {
             const nodes = new Map();
             const links = [];
             
@@ -1112,44 +1188,53 @@
                             // 如果相似度低于阈值，跳过
                             if (pair.overall_similarity < similarityFilter) return;
                             
-                            // 提取文件名（去掉扩展名和分数）
+                            // 检查是否隐藏0分文件
+                            const file1Score = extractScore(pair.file1);
+                            const file2Score = extractScore(pair.file2);
+                            if (hideZeroScore && (file1Score === 0 || file2Score === 0)) return;
+                            
+                            // 检查是否低于最低分
+                            if (file1Score < minScore || file2Score < minScore) return;
+
+                            // 节点唯一key: 姓名-题目
                             const file1Name = extractStudentName(pair.file1);
                             const file2Name = extractStudentName(pair.file2);
+                            const node1Id = file1Name + '-' + problemName;
+                            const node2Id = file2Name + '-' + problemName;
                             
-                            // 添加节点
-                            if (!nodes.has(file1Name)) {
-                                nodes.set(file1Name, {
-                                    id: file1Name,
+                            // 添加节点1
+                            if (!nodes.has(node1Id)) {
+                                nodes.set(node1Id, {
+                                    id: node1Id,
                                     name: file1Name,
-                                    problems: new Set(),
+                                    problem: problemName,
+                                    score: file1Score,
                                     totalSimilarity: 0,
                                     connections: 0
                                 });
                             }
-                            if (!nodes.has(file2Name)) {
-                                nodes.set(file2Name, {
-                                    id: file2Name,
+                            // 添加节点2
+                            if (!nodes.has(node2Id)) {
+                                nodes.set(node2Id, {
+                                    id: node2Id,
                                     name: file2Name,
-                                    problems: new Set(),
+                                    problem: problemName,
+                                    score: file2Score,
                                     totalSimilarity: 0,
                                     connections: 0
                                 });
                             }
-                            
                             // 更新节点信息
-                            const node1 = nodes.get(file1Name);
-                            const node2 = nodes.get(file2Name);
-                            node1.problems.add(problemName);
-                            node2.problems.add(problemName);
+                            const node1 = nodes.get(node1Id);
+                            const node2 = nodes.get(node2Id);
                             node1.totalSimilarity += pair.overall_similarity;
                             node2.totalSimilarity += pair.overall_similarity;
                             node1.connections++;
                             node2.connections++;
-                            
-                            // 添加连接
+                            // 添加连线
                             links.push({
-                                source: file1Name,
-                                target: file2Name,
+                                source: node1Id,
+                                target: node2Id,
                                 similarity: pair.overall_similarity,
                                 problem: problemName,
                                 file1: pair.file1,
@@ -1159,11 +1244,16 @@
                     }
                 });
             }
-            
             return {
                 nodes: Array.from(nodes.values()),
                 links: links
             };
+        }
+
+        function extractScore(filename) {
+            // 提取文件名中的分数，支持多种后缀
+            const match = filename.match(/_(\d+)分\.[a-zA-Z0-9]+$/);
+            return match ? parseInt(match[1]) : 0;
         }
 
         function extractStudentName(filename) {
@@ -1174,21 +1264,17 @@
         function displayGraph(graphData) {
             const container = document.getElementById('graphContainer');
             container.innerHTML = '';
-            
             if (graphData.nodes.length === 0) {
                 container.innerHTML = '<div style="text-align: center; padding: 50px; color: #666;">暂无抄袭关系数据</div>';
                 return;
             }
-            
             const width = container.clientWidth;
             const height = Math.max(600, container.clientHeight || 600);
-            
             // 创建SVG
             const svg = d3.select(container)
                 .append('svg')
                 .attr('width', width)
                 .attr('height', height);
-            
             // 创建缩放功能
             const zoom = d3.zoom()
                 .scaleExtent([0.1, 4])
@@ -1196,20 +1282,16 @@
                     svg.select('.links').attr('transform', event.transform);
                     svg.select('.nodes').attr('transform', event.transform);
                 });
-            
-            // 应用缩放功能到SVG
             svg.call(zoom);
-            
-            // 创建力导向图
-            simulation = d3.forceSimulation(graphData.nodes)
+            // 力导向图
+            const simulation = d3.forceSimulation(graphData.nodes)
                 .force('link', d3.forceLink(graphData.links).id(d => d.id).distance(80))
                 .force('charge', d3.forceManyBody().strength(-150))
                 .force('center', d3.forceCenter(width / 2, height / 2))
                 .force('collision', d3.forceCollide().radius(35))
                 .alphaDecay(0.02)
                 .velocityDecay(0.4);
-            
-            // 创建连接线
+            // 连接线
             const link = svg.append('g')
                 .attr('class', 'links')
                 .selectAll('line')
@@ -1218,8 +1300,7 @@
                 .attr('stroke', d => getLinkColor(d.similarity))
                 .attr('stroke-width', d => Math.max(1, d.similarity * 5))
                 .attr('opacity', 0.6);
-            
-            // 创建节点
+            // 节点
             const node = svg.append('g')
                 .attr('class', 'nodes')
                 .selectAll('g')
@@ -1229,24 +1310,21 @@
                     .on('start', dragstarted)
                     .on('drag', dragged)
                     .on('end', dragended));
-            
-            // 添加节点圆圈
+            // 节点圆圈
             node.append('circle')
                 .attr('r', d => Math.max(8, Math.min(20, d.connections * 3)))
                 .attr('fill', d => getNodeColor(d.connections))
                 .attr('stroke', '#fff')
                 .attr('stroke-width', 2);
-            
-            // 添加节点标签
+            // 节点标签
             node.append('text')
-                .text(d => d.name)
+                .text(d => `${d.name}-${d.problem}`)
                 .attr('x', 0)
                 .attr('y', 25)
                 .attr('text-anchor', 'middle')
                 .attr('font-size', '12px')
                 .attr('fill', '#333');
-            
-            // 添加连接数标签
+            // 连接数标签
             node.append('text')
                 .text(d => d.connections)
                 .attr('x', 0)
@@ -1255,27 +1333,22 @@
                 .attr('font-size', '10px')
                 .attr('fill', '#fff')
                 .attr('font-weight', 'bold');
-            
-            // 添加工具提示
+            // 工具提示
             node.append('title')
-                .text(d => `${d.name}\n连接数: ${d.connections}\n涉及题目: ${Array.from(d.problems).join(', ')}\n平均相似度: ${(d.totalSimilarity / d.connections * 100).toFixed(1)}%`);
-            
+                .text(d => `${d.name} - ${d.problem}\n分数: ${d.score}分\n连接数: ${d.connections}\n平均相似度: ${(d.totalSimilarity / d.connections * 100).toFixed(1)}%`);
             link.append('title')
                 .text(d => `${d.file1} ↔ ${d.file2}\n相似度: ${(d.similarity * 100).toFixed(1)}%\n题目: ${d.problem}`);
-            
-            // 更新位置
+            // tick
             simulation.on('tick', () => {
                 link
                     .attr('x1', d => d.source.x)
                     .attr('y1', d => d.source.y)
                     .attr('x2', d => d.target.x)
                     .attr('y2', d => d.target.y);
-                
                 node
                     .attr('transform', d => `translate(${d.x},${d.y})`);
             });
-            
-            // 添加重置视图按钮
+            // 重置视图按钮
             const resetButton = document.createElement('button');
             resetButton.textContent = '重置视图';
             resetButton.className = 'upload-btn';
@@ -1290,8 +1363,7 @@
             };
             container.style.position = 'relative';
             container.appendChild(resetButton);
-            
-            // 添加使用说明
+            // 操作说明
             const helpDiv = document.createElement('div');
             helpDiv.innerHTML = `
                 <div style="position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; font-size: 12px; max-width: 200px;">
@@ -1303,19 +1375,16 @@
                 </div>
             `;
             container.appendChild(helpDiv);
-            
             // 拖拽函数
             function dragstarted(event, d) {
                 if (!event.active) simulation.alphaTarget(0.3).restart();
                 d.fx = d.x;
                 d.fy = d.y;
             }
-            
             function dragged(event, d) {
                 d.fx = event.x;
                 d.fy = event.y;
             }
-            
             function dragended(event, d) {
                 if (!event.active) simulation.alphaTarget(0);
                 d.fx = null;
@@ -1345,13 +1414,29 @@
                 return;
             }
             
+            // 按题目分组统计
+            const problemStats = {};
+            graphData.links.forEach(link => {
+                if (!problemStats[link.problem]) {
+                    problemStats[link.problem] = {
+                        nodes: new Set(),
+                        links: [],
+                        similarities: []
+                    };
+                }
+                problemStats[link.problem].nodes.add(link.source);
+                problemStats[link.problem].nodes.add(link.target);
+                problemStats[link.problem].links.push(link);
+                problemStats[link.problem].similarities.push(link.similarity);
+            });
+            
             const totalNodes = graphData.nodes.length;
             const totalLinks = graphData.links.length;
             const avgSimilarity = graphData.links.reduce((sum, link) => sum + link.similarity, 0) / totalLinks;
             const maxConnections = Math.max(...graphData.nodes.map(n => n.connections));
             const highlySuspicious = graphData.nodes.filter(n => n.connections >= 3).length;
             
-            statsDiv.innerHTML = `
+            let statsHTML = `
                 <div class="card">
                     <h4>📊 图形统计</h4>
                     <div class="file-info">
@@ -1376,6 +1461,40 @@
                             <div>${highlySuspicious} 人</div>
                         </div>
                     </div>
+            `;
+            
+            // 添加各题目详细统计
+            if (Object.keys(problemStats).length > 1) {
+                statsHTML += `
+                    <div style="margin-top: 20px;">
+                        <h5>📝 各题目统计:</h5>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 10px;">
+                `;
+                
+                Object.entries(problemStats).forEach(([problemName, stats]) => {
+                    const nodeCount = stats.nodes.size;
+                    const linkCount = stats.links.length;
+                    const avgSim = stats.similarities.reduce((sum, sim) => sum + sim, 0) / stats.similarities.length;
+                    
+                    statsHTML += `
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea;">
+                            <h6 style="margin-bottom: 10px; color: #667eea;">${problemName}</h6>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">
+                                <div>学生数: <strong>${nodeCount}</strong></div>
+                                <div>关系数: <strong>${linkCount}</strong></div>
+                                <div>平均相似度: <strong>${(avgSim * 100).toFixed(1)}%</strong></div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                statsHTML += `
+                        </div>
+                    </div>
+                `;
+            }
+            
+            statsHTML += `
                     <div style="margin-top: 15px;">
                         <h5>🔍 图例说明:</h5>
                         <div style="display: flex; gap: 20px; margin-top: 10px;">
@@ -1399,6 +1518,8 @@
                     </div>
                 </div>
             `;
+            
+            statsDiv.innerHTML = statsHTML;
         }
 
         function showSuccess(message) {
@@ -1407,6 +1528,27 @@
             successDiv.textContent = message;
             document.querySelector('.content').insertBefore(successDiv, document.querySelector('.content').firstChild);
             setTimeout(() => successDiv.remove(), 3000);
+        }
+        // 用户名查询排名功能
+        function queryUserRank() {
+            const val = document.getElementById('userQueryInput').value.trim().toLowerCase();
+            const resultDiv = document.getElementById('userQueryResult');
+            if (!val) { resultDiv.innerHTML = '<span style="color:#888;">请输入用户名/学号/姓名</span>'; return; }
+            const data = window._userRankData || [];
+            const problems = window._userRankProblems || [];
+            const found = data.filter(u=>u.user.toLowerCase().includes(val));
+            if (found.length===0) {
+                resultDiv.innerHTML = '<span style="color:#c00;">未找到该用户</span>';
+                return;
+            }
+            resultDiv.innerHTML = found.map(u=>`
+                <div style="margin-bottom:10px;">
+                    <strong>${u.user}</strong> 总分：${u.total}，排名：${u.rank}
+                    <div style="margin-top:5px;">
+                        ${problems.map(pn=>`${pn}: <span style='color:#667eea;'>${u.perProblem[pn]??0}</span>`).join(' | ')}
+                    </div>
+                </div>
+            `).join('');
         }
     </script>
     

@@ -305,7 +305,7 @@ class PlagiarismDetector:
                     similarity_pairs.append(similarity_info)
                     
                     # 标记可疑的抄袭对
-                    if overall_similarity > 0.5:
+                    if overall_similarity > 0.6:
                         suspicious_pairs.append(similarity_info)
             
             # 生成该题目的报告
